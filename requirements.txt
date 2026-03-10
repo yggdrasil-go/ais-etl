@@ -1,0 +1,6 @@
+trino
+pandas
+numpy
+scipy
+python-dotenv
+websockets
