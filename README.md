@@ -8,18 +8,18 @@ AIS 데이터를 Iceberg(Trino)에 적재하고 Kafka를 통해 실시간 수집
 *   **실시간 수집:** [aisstream.io](https://aisstream.io) (WebSocket)
     *   현재 Cloudflare 차단 이슈(#170)로 인해 서버 사이드 접속 불안정 상태.
 *   **과거 데이터(Backfill):** [IMF PortWatch](https://portwatch.imf.org) (ArcGIS REST API)
-    *   28개 주요 병목 지점(Chokepoint) 및 항구(Port) 데이터 수집 가능 확인.
+    *   28개 주요 병목 지점(Chokepoint) 및 항구(Port) 데이터 수집 및 Iceberg 적재 로직 완성.
 
 ### 2. 구현된 모듈 (`src/`)
-*   **`imf_portwatch_manager.py`**: 
-    *   28개 Chokepoint의 마스터 정보(좌표, ID 등) 및 일일 물동량 통계 데이터 추출 로직 완성.
-*   **`ais_manager.py`**: 
-    *   `chokepoints.bbox` 기반의 실시간 AIS 수집 로직 구현 (특정 지점 필터링 기능 포함).
-    *   Cloudflare 우회를 위한 헤더 최적화 및 타임아웃 강화 로직 적용.
+*   **`imf_portwatch_manager.py`**: 28개 Chokepoint의 마스터 정보 및 일일 물동량 통계 데이터 추출.
+*   **`trino_manager.py`**: Trino(Nessie/Iceberg) 연결 및 쿼리 실행 관리.
+*   **`setup_trino_tables.py`**: `portwatch.chokepoints` Iceberg 테이블 생성/초기화 스크립트.
+*   **`portwatch_etl.py`**: IMF 데이터를 추출(Extract)하여 Trino 테이블에 적재(Load)하는 전체 ETL 프로세스.
+*   **`ais_manager.py`**: 실시간 AIS 수집 로직 (Cloudflare 대응 및 특정 지점 필터링).
 
 ### 3. 설정 파일
 *   **`chokepoints.bbox`**: 28개 주요 해협 및 운하의 감시 구역(Bounding Box) 정의 완료.
-*   **`.env`**: `AISSTREAM_API_KEY` 등 환경 변수 관리.
+*   **.env**: `AISSTREAM_API_KEY`, `TRINO_URL`, `TRINO_PORT` 등 환경 변수 관리.
 
 ---
 
@@ -28,7 +28,6 @@ AIS 데이터를 Iceberg(Trino)에 적재하고 Kafka를 통해 실시간 수집
 ### 1. Conda 가상환경
 본 프로젝트는 `ais` 가상환경을 사용합니다.
 ```bash
-# 가상환경 활성화 (필요 시)
 conda activate ais
 ```
 
@@ -41,12 +40,17 @@ pip install -r requirements.txt
 
 ## 🚀 실행 커맨드
 
-### 1. IMF PortWatch 데이터 확인 (통계 및 좌표)
+### 1. Trino 테이블 초기화 (최초 1회)
 ```bash
-conda run -n ais python -m src.imf_portwatch_manager
+conda run -n ais python -m src.setup_trino_tables
 ```
 
-### 2. 실시간 AIS 수집 테스트 (현재 서비스 불안정)
+### 2. IMF PortWatch ETL 실행 (과거 데이터 적재)
+```bash
+conda run -n ais python -m src.portwatch_etl --start_date 2026-03-01 --end_date 2026-03-05
+```
+
+### 3. 실시간 AIS 수집 테스트 (서비스 불안정 시 작동 안 함)
 ```bash
 conda run -n ais python -m src.ais_manager
 ```
@@ -55,4 +59,4 @@ conda run -n ais python -m src.ais_manager
 
 ## ⚠️ 이슈 리포트
 *   **AISStream Cloudflare Issue:** 현재 `aisstream.io` 서버가 Cloudflare WAF를 통해 서버 사이드 WebSocket 핸드셰이크를 차단하고 있음 ([GitHub Issue #170](https://github.com/aisstream/issues/issues/170)).
-*   **대응:** 이슈 해결을 모니터링 중이며, 대안 소스(BarentsWatch, AISHub 등) 검토 중.
+*   **현재 대응:** IMF PortWatch 데이터를 통한 백필 로직에 집중하여 Iceberg 파이프라인 구축 완료.
