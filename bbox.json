@@ -1,0 +1,114 @@
+[
+  {
+    "chokepoints": "Suez Canal",
+    "bbox": [[30.0933, 31.9369], [31.0933, 32.9369]]
+  },
+  {
+    "chokepoints": "Panama Canal",
+    "bbox": [[8.90949, -79.97498], [9.43281, -79.45587]]
+  },
+  {
+    "chokepoints": "Bosporus Strait",
+    "bbox": [[40.98508, 28.95721], [41.23961, 29.16733]]
+  },
+  {
+    "chokepoints": "Bab el-Mandeb Strait",
+    "bbox": [[12.4473, 43.20374], [12.86536, 43.6322]]
+  },
+  {
+    "chokepoints": "Malacca Strait",
+    "bbox": [[2.74553, 99.00879], [5.02528, 101.90918]]
+  },
+  {
+    "chokepoints": "Strait of Hormuz",
+    "bbox": [[25.7969, 56.3598], [26.7969, 57.3598]]
+  },
+  {
+    "chokepoints": "Cape of Good Hope",
+    "bbox": [[-35.90685, 17.66602], [-33.44978, 27.00439]]
+  },
+  {
+    "chokepoints": "Gibraltar Strait",
+    "bbox": [[35.65283, -5.92712], [36.19553, -5.32837]]
+  },
+  {
+    "chokepoints": "Dover Strait",
+    "bbox": [[50.82676, 1.27441], [51.17934, 1.66992]]
+  },
+  {
+    "chokepoints": "Oresund Strait",
+    "bbox": [[55.60318, 12.50244], [56.0078, 13.1012]]
+  },
+  {
+    "chokepoints": "Taiwan Strait",
+    "bbox": [[23.09994, 116.71875], [27.37177, 121.37695]]
+  },
+  {
+    "chokepoints": "Korea Strait",
+    "bbox": [[33.25706, 128.37524], [35.24562, 130.61646]]
+  },
+  {
+    "chokepoints": "Tsugaru Strait",
+    "bbox": [[41.17038, 140.18005], [41.81636, 140.89417]]
+  },
+  {
+    "chokepoints": "Luzon Strait",
+    "bbox": [[19.9889, 120.8523], [20.9889, 121.8523]]
+  },
+  {
+    "chokepoints": "Lombok Strait",
+    "bbox": [[-8.51584, 115.60913], [-8.32021, 116.10901]]
+  },
+  {
+    "chokepoints": "Ombai Strait",
+    "bbox": [[-8.62447, 125.08484], [-8.27401, 125.56274]]
+  },
+  {
+    "chokepoints": "Bohai Strait",
+    "bbox": [[37.77506, 120.56946], [38.78835, 121.20667]]
+  },
+  {
+    "chokepoints": "Torres Strait",
+    "bbox": [[-10.96816, 142.21802], [-9.19429, 142.66846]]
+  },
+  {
+    "chokepoints": "Sunda Strait",
+    "bbox": [[-6.07228, 105.72693], [-5.83462, 105.96039]]
+  },
+  {
+    "chokepoints": "Makassar Strait",
+    "bbox": [[0.0769, 118.78418], [1.02167, 119.90479]]
+  },
+  {
+    "chokepoints": "Magellan Strait",
+    "bbox": [[-52.53296, -69.63135], [-52.44598, -69.5105]]
+  },
+  {
+    "chokepoints": "Yucatan Channel",
+    "bbox": [[21.08963, -86.92383], [22.41103, -83.93555]]
+  },
+  {
+    "chokepoints": "Windward Passage",
+    "bbox": [[19.68397, -74.1975], [20.2725, -73.31177]]
+  },
+  {
+    "chokepoints": "Mona Passage",
+    "bbox": [[18.0832, -68.44482], [18.65665, -67.00562]]
+  },
+  {
+    "chokepoints": "Balabac Strait",
+    "bbox": [[6.92643, 116.69128], [8.3963, 117.30103]]
+  },
+  {
+    "chokepoints": "Bering Strait",
+    "bbox": [[65.52207, -169.99707], [66.16051, -167.76123]]
+  },
+  {
+    "chokepoints": "Mindoro Strait",
+    "bbox": [[12.09304, 120.17944], [12.80109, 120.91553]]
+  },
+  {
+    "chokepoints": "Kerch Strait",
+    "bbox": [[45.08904, 36.38123], [45.47939, 36.8866]]
+  }
+]
