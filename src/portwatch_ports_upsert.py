@@ -95,7 +95,9 @@ class PortStatsETL:
                 MERGE INTO prod.portwatch.ports t
                 USING updates s
                 ON (t.portid = s.portid AND t.event_date = s.event_date)
-                WHEN MATCHED THEN
+                WHEN MATCHED AND (
+                    t.portcalls != s.portcalls OR t.import != s.import OR t.export != s.export
+                ) THEN
                     UPDATE SET 
                         portcalls_tanker = s.portcalls_tanker, portcalls_container = s.portcalls_container,
                         portcalls_dry_bulk = s.portcalls_dry_bulk, portcalls_general_cargo = s.portcalls_general_cargo,

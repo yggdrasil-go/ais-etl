@@ -82,7 +82,9 @@ class PortWatchETL:
                 MERGE INTO prod.portwatch.chokepoints t
                 USING chokepoint_updates s
                 ON (t.portid = s.portid AND t.event_date = s.event_date)
-                WHEN MATCHED THEN
+                WHEN MATCHED AND (
+                    t.n_total != s.n_total OR t.capacity != s.capacity
+                ) THEN
                     UPDATE SET 
                         n_tanker = s.n_tanker,
                         n_container = s.n_container,
