@@ -1,73 +1,62 @@
 # AIS ETL Project
 
-AIS 데이터를 Iceberg(Trino)에 적재하고 Kafka를 통해 실시간 수집하는 ETL 프로젝트입니다.
+AIS 데이터를 Iceberg(Nessie)에 적재하고 Spark Connect를 통해 효율적으로 수집하는 ETL 프로젝트입니다.
 
 ## 📌 현재 진행 상황
 
-### 1. 데이터 소스 특정
+### 1. 데이터 소스 및 아키텍처
 *   **실시간 수집:** [aisstream.io](https://aisstream.io) (WebSocket)
-    *   **글로벌 모니터링:** 전 세계 28개 주요 요충지의 실시간 트래픽 수집 가능.
-*   **과거 데이터(Backfill):** [IMF PortWatch](https://portwatch.imf.org) (ArcGIS REST API)
-    *   28개 주요 요충지(Chokepoint) 및 2,000여 개 항구(Port) 데이터 수집 및 Iceberg 적재 완성.
-    *   **UPSERT 지원:** `(portid, event_date)`를 키로 사용하여 데이터 중복 방지 및 변경 시에만 업데이트.
-    *   **단일 커밋 최적화:** 대량 적재 시 단일 `MERGE INTO` 쿼리를 사용하여 Nessie 커밋 부하 최소화.
+*   **과거 데이터(Backfill):** [IMF PortWatch] (ArcGIS REST API)
+*   **적재 엔진:** **Spark Connect** (Remote Session)
+    *   K8s에 상시 가동 중인 Spark Connect Server에 접속하여 가벼운 클라이언트로 고속 적재 수행.
+    *   **Iceberg MERGE INTO:** 중복 방지 및 UPSERT 지원.
+    *   **단일 커밋 최적화:** 백필 시 전 기간 데이터를 수집 후 단일 `MERGE` 쿼리를 실행하여 Nessie 커밋 부하 최소화 및 이력 정렬.
 
 ### 2. 구현된 모듈 (`src/`)
-*   **`imf_portwatch_manager.py`**: IMF API 인터페이스. 페이지네이션 및 날짜별 최적화 쿼리 지원.
-*   **`trino_manager.py`**: Trino(Nessie/Iceberg) 연결 및 쿼리 실행 관리.
-*   **`setup_trino_tables.py`**: Trino 테이블(chokepoints, ports, master tables) 초기 생성.
-*   **`master_data_etl.py`**: 항구/요충지 마스터 정보 적재. (전체 데이터 UPSERT)
-*   **`portwatch_chokepoints_upsert.py`**: 해상 요충지 일별 통계 적재. (기본 최근 10일)
-*   **`portwatch_ports_upsert.py`**: 전 세계 항구 일별 통계 적재. (일자별 루프 백필 최적화)
-*   **`ais_manager.py`**: `bbox.json`에 정의된 구역의 실시간 AIS 수집 (WebSocket 스트리밍).
+*   **`spark_manager.py`**: Spark Connect 전용 세션 관리 및 Nessie 커밋 메타데이터 주입.
+*   **`imf_portwatch_manager.py`**: IMF API 인터페이스.
+*   **`portwatch_chokepoints_upsert.py`**: 해상 요충지 통계 적재 (Spark Connect 기반).
+*   **`portwatch_ports_upsert.py`**: 항구 통계 적재 (Single-Commit 최적화 적용).
+*   **`ais_manager.py`**: `bbox.json` 구역의 실시간 AIS 수집 스트리밍.
 
-### 3. 설정 파일
-*   **`bbox.json`**: 28개 주요 해협 및 운하의 감시 구역(Bounding Box) 좌표. `aisstream.io` 규격 준수.
-*   **.env**: `AISSTREAM_API_KEY`, `TRINO_URL`, `TRINO_PORT` 등 환경 변수 관리.
-
-### 4. Trino 접속 및 쿼리
-- **접속 명령어**:
-  ```bash
-  trino --server http://trino.hotel.svc.cluster.local:8080 --catalog nessie --user context_builder
-  ```
-- **테이블 스키마 변경 사항**:
-    - `created_at`, `updated_at` 컬럼 존재 (TIMESTAMP WITH TIME ZONE).
+### 3. Nessie 커밋 추적 (Commit History)
+적재 시마다 Nessie 커밋 헤더에 다음 정보가 자동으로 기록됩니다:
+- **Author**: `AIS ETL Pipeline`
+- **Message**: 적재 대상 테이블, 데이터 범위(Start/End), 전체 행(Row) 개수 포함.
+- **예시**: `Upsert 6099 rows into portwatch.ports (Range: 2026-03-01 to 2026-03-10)`
 
 ---
 
 ## ⚙️ 환경 설정
 
-### 1. Conda 가상환경
-본 프로젝트는 `ais` 또는 `oag` 가상환경을 사용합니다.
+### 1. Conda 가상환경 및 라이브러리
 ```bash
 conda activate ais
+pip install pyspark==3.5.0 grpcio grpcio-status protobuf==3.20.3
 ```
+
+### 2. 환경 변수 (.env)
+- `SPARK_REMOTE_URL`: Spark Connect 서버 주소 (`sc://...`)
+- `AISSTREAM_API_KEY`: AISStream API 키
 
 ---
 
 ## 🚀 실행 커맨드
 
-### 1. 마스터 데이터 적재
+### 1. 요충지 및 항구 통계 적재 (Daily/Backfill)
+Spark Connect를 통해 원격 서버에서 적재가 수행됩니다.
 ```bash
-conda run -n ais python -m src.master_data_etl
+# 기본 (최근 10일)
+python -m src.portwatch_chokepoints_upsert
+python -m src.portwatch_ports_upsert
+
+# 과거 데이터 백필
+python -m src.portwatch_ports_upsert --start_date 2026-01-01 --end_date 2026-03-12
 ```
 
-### 2. 요충지 및 항구 통계 적재 (Daily)
-각각 최근 10일치 데이터를 UPSERT 방식으로 적재합니다.
+### 2. 연결 테스트
 ```bash
-conda run -n ais python -m src.portwatch_chokepoints_upsert
-conda run -n ais python -m src.portwatch_ports_upsert
-```
-
-### 3. 실시간 AIS 글로벌 모니터링
-`bbox.json`의 28개 구역 데이터를 실시간 스트리밍합니다.
-```bash
-conda run -n ais python -m src.ais_manager
-```
-
-### 4. 과거 데이터 백필 (Backfill)
-```bash
-conda run -n ais python -m src.portwatch_ports_upsert --start_date 2026-01-01 --end_date 2026-03-12
+python -m src.spark_manager
 ```
 
 ---
