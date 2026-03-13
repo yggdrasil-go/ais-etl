@@ -4,3 +4,4 @@ numpy
 scipy
 python-dotenv
 websockets
+pyspark[connect]==4.0.1

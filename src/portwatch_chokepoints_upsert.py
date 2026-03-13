@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 from imf_portwatch_manager import IMFPortWatchManager
-from trino_manager import TrinoManager
+from spark_manager import SparkManager
 
 # Logger 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class PortWatchETL:
     def __init__(self):
         self.imf_manager = IMFPortWatchManager()
-        self.trino_manager = TrinoManager()
+        self.spark_manager = SparkManager()
 
     def extract(self, start_date: str, end_date: str) -> pd.DataFrame:
         """IMF PortWatch API로부터 데이터를 추출합니다."""
@@ -37,38 +37,52 @@ class PortWatchETL:
         return df_filtered
 
     def load(self, df: pd.DataFrame):
-        """추출된 데이터를 Trino/Iceberg 테이블에 단일 쿼리로 UPSERT(MERGE)합니다."""
+        """추출된 데이터를 Spark Connect를 통해 UPSERT(MERGE)합니다."""
         if df.empty:
             logger.warning("No data to load.")
             return
 
-        conn = self.trino_manager.get_connection()
-        cur = conn.cursor()
+        from pyspark.sql import functions as F
+        spark = self.spark_manager.get_spark()
         
         try:
-            logger.info(f"Preparing single-commit UPSERT for {len(df)} rows...")
+            logger.info(f"Uploading {len(df)} rows to Spark and merging into Iceberg (chokepoints)...")
             
-            # 1. VALUES 절의 플레이스홀더 생성 (마지막 필드 event_date는 CAST(? AS DATE) 처리)
-            row_placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE))"
-            all_placeholders = ", ".join([row_placeholders] * len(df))
+            # 1. Pandas DataFrame -> Spark DataFrame 변환 및 전처리
+            sdf = spark.createDataFrame(df)
             
-            # 2. MERGE INTO SQL 작성
-            sql = f"""
-                MERGE INTO portwatch.chokepoints t
-                USING (VALUES {all_placeholders}) 
-                AS s (portid, portname, n_tanker, n_container, n_dry_bulk, 
-                      n_general_cargo, n_roro, n_cargo, n_total, capacity, event_date)
-                ON (t.portid = s.portid AND t.portname = s.portname AND t.event_date = s.event_date)
-                WHEN MATCHED AND (
-                    t.n_tanker != s.n_tanker OR 
-                    t.n_container != s.n_container OR 
-                    t.n_dry_bulk != s.n_dry_bulk OR
-                    t.n_general_cargo != s.n_general_cargo OR
-                    t.n_roro != s.n_roro OR
-                    t.n_cargo != s.n_cargo OR
-                    t.n_total != s.n_total OR
-                    t.capacity != s.capacity
-                ) THEN
+            prepared_df = sdf.select(
+                F.col("portid").cast("string"),
+                F.col("portname").cast("string"),
+                F.col("n_tanker").cast("int"),
+                F.col("n_container").cast("int"),
+                F.col("n_dry_bulk").cast("int"),
+                F.col("n_general_cargo").cast("int"),
+                F.col("n_roro").cast("int"),
+                F.col("n_cargo").cast("int"),
+                F.col("n_total").cast("int"),
+                F.col("capacity").cast("long"),
+                F.col("Date").alias("event_date").cast("date")
+            )
+            
+            prepared_df.createOrReplaceTempView("chokepoint_updates")
+            
+            # 2. Nessie 커밋 메타데이터 설정 (작성자, 메시지)
+            row_count = len(df)
+            start_date = df['Date'].min()
+            end_date = df['Date'].max()
+            
+            self.spark_manager.set_nessie_commit_metadata(
+                author="AIS ETL Pipeline",
+                message=f"Upsert {row_count} rows into portwatch.chokepoints (Range: {start_date} to {end_date})"
+            )
+            
+            # 3. MERGE INTO SQL (prod 카탈로그)
+            sql = """
+                MERGE INTO prod.portwatch.chokepoints t
+                USING chokepoint_updates s
+                ON (t.portid = s.portid AND t.event_date = s.event_date)
+                WHEN MATCHED THEN
                     UPDATE SET 
                         n_tanker = s.n_tanker,
                         n_container = s.n_container,
@@ -78,43 +92,22 @@ class PortWatchETL:
                         n_cargo = s.n_cargo,
                         n_total = s.n_total,
                         capacity = s.capacity,
-                        updated_at = now()
+                        updated_at = current_timestamp()
                 WHEN NOT MATCHED THEN
                     INSERT (portid, portname, n_tanker, n_container, n_dry_bulk, 
                             n_general_cargo, n_roro, n_cargo, n_total, capacity, 
                             event_date, created_at, updated_at)
                     VALUES (s.portid, s.portname, s.n_tanker, s.n_container, s.n_dry_bulk, 
                             s.n_general_cargo, s.n_roro, s.n_cargo, s.n_total, s.capacity, 
-                            s.event_date, now(), now())
+                            s.event_date, current_timestamp(), current_timestamp())
             """
             
-            # 3. 모든 데이터를 하나의 평탄화된 리스트로 변환
-            all_values = []
-            for _, r in df.iterrows():
-                all_values.extend([
-                    str(r['portid']), 
-                    str(r['portname']), 
-                    int(r['n_tanker']), 
-                    int(r['n_container']),
-                    int(r['n_dry_bulk']), 
-                    int(r['n_general_cargo']), 
-                    int(r['n_roro']),
-                    int(r['n_cargo']), 
-                    int(r['n_total']), 
-                    int(r['capacity']), 
-                    str(r['Date'])
-                ])
-
-            logger.info(f"Executing single-commit MERGE into portwatch.chokepoints...")
-            cur.execute(sql, all_values)
-            logger.info("Upsert completed successfully in a single commit.")
+            spark.sql(sql)
+            logger.info("Successfully upserted chokepoint data via Spark.")
             
         except Exception as e:
-            logger.error(f"Error during upsert: {e}")
+            logger.error(f"Error during chokepoint upsert via Spark: {e}")
             raise
-        finally:
-            cur.close()
-            conn.close()
 
     def run(self, start_date: str, end_date: str):
         """ETL 프로세스 전체 실행"""
