@@ -1,5 +1,9 @@
 FROM python:3.11-slim-bookworm
 
+# GHCR과 GitHub 레포지토리 연결을 위한 라벨 추가
+LABEL org.opencontainers.image.source="https://github.com/yggdrasil-go/ais-etl"
+LABEL org.opencontainers.image.description="AIS ETL Project for Iceberg/Nessie with Spark Connect"
+
 WORKDIR /app
 
 # 1. 의존성 설치
